@@ -55,6 +55,7 @@
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.513.0",
+    "micro": "^10.0.1",
     "mongodb": "^6.17.0",
     "mongoose": "^8.15.1",
     "next": "15.3.3",
