@@ -1,6 +1,7 @@
-import { buffer } from "micro";
+
+import { stripe } from "@/lib/stripe";
+import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { NextApiRequest, NextApiResponse } from "next";
 
 export const config = {
   api: {
@@ -8,34 +9,46 @@ export const config = {
   },
 };
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-05-28.basil",
-});
+async function getRawBody(req: NextRequest): Promise<Buffer> {
+  const reader = req.body?.getReader();
+  const chunks = [];
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).end("Method Not Allowed");
+  if (!reader) return Buffer.from([]);
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
   }
 
-  const sig = req.headers["stripe-signature"] as string;
-  const buf = await buffer(req);
+  return Buffer.concat(chunks);
+}
+
+
+export async function POST(req: NextRequest) {
+  const sig = req.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  let event;
+  if (!sig || !webhookSecret) {
+    return new NextResponse("Missing Stripe signature or webhook secret", { status: 400 });
+  }
+
+  const buf = await getRawBody(req);
+  let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(buf, sig, webhookSecret!);
+    event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
   } catch (err: any) {
-    console.error("Webhook signature verification failed:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    console.error("❌ Webhook signature verification failed:", err.message);
+    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
   }
 
   console.log("✅ Verified event:", event.type);
 
   if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
+    const session = event.data.object as Stripe.Checkout.Session;
     console.log("🎉 Checkout session completed:", session);
   }
 
-  res.status(200).json({ received: true });
+  return new NextResponse("Webhook received", { status: 200 });
 }
