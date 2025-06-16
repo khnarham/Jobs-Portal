@@ -1,54 +1,64 @@
-
+import { JobPostModel } from "@/database/schema/JobPostModel";
+import UserModel from "@/database/schema/UserModel";
+import { connectDB } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+export async function POST(req: Request) {
+  const body = await req.text();
+  const signature = req.headers.get("stripe-signature") as string;
 
-async function getRawBody(req: NextRequest): Promise<Buffer> {
-  const reader = req.body?.getReader();
-  const chunks = [];
-
-  if (!reader) return Buffer.from([]);
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) chunks.push(value);
-  }
-
-  return Buffer.concat(chunks);
-}
-
-
-export async function POST(req: NextRequest) {
-  const sig = req.headers.get("stripe-signature");
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (!sig || !webhookSecret) {
-    return new NextResponse("Missing Stripe signature or webhook secret", { status: 400 });
-  }
-
-  const buf = await getRawBody(req);
   let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
-  } catch (err: any) {
-    console.error("❌ Webhook signature verification failed:", err.message);
-    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+  } catch (err) {
+    console.error("❌ Webhook verification failed:", err);
+    return new Response("Invalid signature", { status: 400 });
   }
-
-  console.log("✅ Verified event:", event.type);
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
-    console.log("🎉 Checkout session completed:", session);
+
+    try {
+        console.log("session",session.customer);
+      const customerId = session.customer;
+      const jobId = session.metadata?.jobId;
+
+      if (!jobId) {
+        console.error("❌ No jobId found in metadata.");
+        return new Response("Missing jobId", { status: 400 });
+      }
+
+      await connectDB();
+
+      const user = await UserModel.findOne({ stripeCustomerId: customerId });
+
+      if (!user) {
+        console.error("❌ User not found with Stripe Customer ID:", customerId);
+        return new Response("User not found", { status: 404 });
+      }
+
+      const result = await JobPostModel.updateOne(
+        { _id: jobId, user: user._id },
+        { $set: { status: "ACTIVE" } }
+      );
+      console.log("RESULT:",result);
+      if (result.modifiedCount === 0) {
+        console.warn("⚠️ Job not updated.");
+        return new Response("Job update failed", { status: 400 });
+      }
+
+      console.log("✅ Job activated successfully");
+    } catch (err) {
+      console.error("❌ Error handling event:", err);
+      return new Response("Internal Server Error", { status: 500 });
+    }
   }
 
-  return new NextResponse("Webhook received", { status: 200 });
+  return new Response("OK", { status: 200 });
 }
