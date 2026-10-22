@@ -29,10 +29,13 @@ const Navbar = async () => {
       </Link>
       <div className="hidden md:flex items-center gap-5">
         <ThemeToggle />
-           <Link href="/post-job" className={buttonVariants({variant: "outline"})}>
-           <Plus className="w-4 h-4" />
-            Post a Job
-           </Link>
+        <Link 
+  href="/post-job" 
+  className={buttonVariants({ variant: "outline" }) + " bg-green-600 text-white hover:bg-green-700 flex"}
+>
+  <h1 className=''>+</h1>
+  Post Job
+</Link>
            {session?.user ? (
             <UserDropdown
             email={session.user.email!}

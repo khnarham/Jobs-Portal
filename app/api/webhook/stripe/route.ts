@@ -1,71 +1,70 @@
-import { JobPostModel } from '@/database/schema/JobPostModel';
-import UserModel from '@/database/schema/UserModel';
+import { JobPostModel, JobPostStatus } from '@/database/schema/JobPostModel';
 import { connectDB } from '@/lib/db';
 import { stripe } from '@/lib/stripe';
-import { NextRequest } from 'next/server';
-import { Readable } from 'stream';
-
-async function buffer(readable: Readable) {
-  const chunks = [];
-  for await (const chunk of readable) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  return Buffer.concat(chunks);
-}
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const rawBody = await buffer(req.body as any);
-  const signature = req.headers.get('stripe-signature')!;
-
-  let event;
+  console.log("⚡ [WEBHOOK] Request received from Stripe!");
 
   try {
-    event = stripe.webhooks.constructEvent(
-      rawBody,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
+    const body = await req.text();
+    const signature = req.headers.get('stripe-signature');
 
-    console.log('✅ Stripe Event:', event.type);
+    if (!signature) {
+      console.error("❌ [WEBHOOK] Missing stripe-signature header");
+      return new NextResponse("Missing stripe-signature header", { status: 400 });
+    }
+
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        body,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET!
+      );
+    } catch (err: any) {
+      console.error("❌ [WEBHOOK] Signature verification failed:", err.message);
+      return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
+    }
+
+    console.log("✅ [WEBHOOK] Event verified successfully:", event.type);
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as any;
-      const customerId = session.customer;
       const jobId = session.metadata?.jobId;
 
+      console.log("📦 [WEBHOOK] Extracted Job ID:", jobId);
+
       if (!jobId) {
-        console.error("❌ No jobId found in metadata.");
-        return new Response("Missing jobId", { status: 400 });
+        console.error("❌ [WEBHOOK] No jobId found in session metadata.");
+        return new NextResponse("Missing jobId", { status: 400 });
       }
 
+      console.log("🔌 [WEBHOOK] Connecting to Database...");
       await connectDB();
+      console.log("✅ [WEBHOOK] Database connected successfully!");
 
-      const user = await UserModel.findOne({ stripeCustomerId: customerId });
-
-      if (!user) {
-        console.error("❌ User not found with Stripe Customer ID:", customerId);
-        return new Response("User not found", { status: 404 });
-      }
-
+      console.log("🔄 [WEBHOOK] Updating Job Status to ACTIVE...");
       const result = await JobPostModel.updateOne(
-        { _id: jobId, user: user._id },
-        { $set: { status: "ACTIVE" } }
+        { _id: jobId },
+        { $set: { status: JobPostStatus.ACTIVE } }
       );
 
-      console.log("RESULT:", result);
+      console.log("📝 [WEBHOOK] Update Result object:", result);
 
-      if (result.modifiedCount === 0) {
-        console.warn("⚠️ Job not updated.");
-        return new Response("Job update failed", { status: 400 });
+      if (result.matchedCount === 0) {
+        console.error("❌ [WEBHOOK] Job not found in DB for ID:", jobId);
+        return new NextResponse("Job not found", { status: 404 });
       }
 
-      console.log("✅ Job activated successfully");
+      console.log("🎉 [WEBHOOK] Job activated successfully!");
     }
 
-    return new Response("OK", { status: 200 });
+    return new NextResponse("OK", { status: 200 });
 
   } catch (err: any) {
-    console.error("❌ Stripe webhook error:", err.message || err);
-    return new Response("Internal Server Error", { status: 500 });
+    console.error("🔥 [WEBHOOK CRASH] Caught unhandled exception:", err.message);
+    console.error("🔥 [WEBHOOK CRASH STACK]:", err.stack);
+    return new NextResponse(`Internal Server Error: ${err.message}`, { status: 500 });
   }
 }

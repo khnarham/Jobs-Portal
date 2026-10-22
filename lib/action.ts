@@ -93,10 +93,10 @@ export const createJobSeeker = async (jobSeekerData: JobSeekerFormValues) => {
 export async function createJob(data: z.infer<typeof jobSchema>) {
     await connectDB();
     const user = await requireUser();
-    const company = await CompanyModel.findOne({ user: user.id }).populate("user", "stripeCustomerId")
+    const company = await CompanyModel.findOne({ user: user.id }).populate("user", "stripeCustomerId");
     
-    if(!company){
-        return {success: false, message: "Company not found"}
+    if (!company) {
+        return { success: false, message: "Company not found" };
     }
     let stripeCustomerId = company.user?.stripeCustomerId;
     
@@ -107,70 +107,73 @@ export async function createJob(data: z.infer<typeof jobSchema>) {
         });
         stripeCustomerId = customer.id;
 
-  await UserModel.findOneAndUpdate(
-        { email: user.email },
-        { $set: { stripeCustomerId: customer.id } },
-        { new: true }
-      );
+        await UserModel.findOneAndUpdate(
+            { email: user.email },
+            { $set: { stripeCustomerId: customer.id } },
+            { new: true }
+        );
+    }
+    
+    const User = await UserModel.findOne({ email: user.email });
+    if (!User) {
+        return { success: false, message: "User not found" };
+    }
 
-    }
-     const User = await UserModel.findOne({email: user.email});
-     if(!User){
-        return {success: false, message: "User not found"}
-     }
-     console.log("USER:",User);
     const jobPost = await JobPostModel.create({
-      companyId: company._id,
-      user: User._id,
-      jobDescription: data.jobDescription,
-      jobTitle: data.jobTitle,
-      employmentType: data.employmentType,
-      location: data.location,
-      salaryFrom: data.salaryFrom,
-      salaryTo: data.salaryTo,
-      listingDuration: data.listingDuration,
-      benefits: data.benefits,
+        companyId: company._id,
+        user: User._id,
+        jobDescription: data.jobDescription,
+        jobTitle: data.jobTitle,
+        employmentType: data.employmentType,
+        location: data.location,
+        salaryFrom: data.salaryFrom,
+        salaryTo: data.salaryTo,
+        listingDuration: data.listingDuration,
+        benefits: data.benefits,
     });
-    if(!jobPost){
-        return {success: false, message: "Failed to create job post"}
+
+    if (!jobPost) {
+        return { success: false, message: "Failed to create job post" };
     }
-     console.log("JOBPOST:",jobPost);
+
     const pricingTier = jobListingDurationPricing.find(
-      (tier) => tier.days === data.listingDuration
+        (tier) => tier.days === data.listingDuration
     );
-  
+        
     if (!pricingTier) {
-      throw new Error("Invalid listing duration selected");
+        throw new Error("Invalid listing duration selected");
     }
   
     const session = await stripe.checkout.sessions.create({
-      customer: stripeCustomerId,
-      line_items: [
-        {
-          price_data: {
-            product_data: {
-              name: `Job Posting - ${pricingTier.days} Days`,
-              description: pricingTier.description,
-              images: [
-                "https://pve1u6tfz1.ufs.sh/f/Ae8VfpRqE7c0gFltIEOxhiBIFftvV4DTM8a13LU5EyzGb2SQ",
-              ],
+        customer: stripeCustomerId,
+        line_items: [
+            {
+                price_data: {
+                    product_data: {
+                        name: `Job Posting - ${pricingTier.days} Days`,
+                        description: pricingTier.description,
+                        images: [
+                            "https://pve1u6tfz1.ufs.sh/f/Ae8VfpRqE7c0gFltIEOxhiBIFftvV4DTM8a13LU5EyzGb2SQ",
+                        ],
+                    },
+                    currency: "USD",
+                    unit_amount: pricingTier.price * 100,
+                },
+                quantity: 1,
             },
-            currency: "USD",
-            unit_amount: pricingTier.price * 100,
-          },
-          quantity: 1,
+        ],
+        mode: "payment",
+        metadata: {
+            jobId: jobPost._id.toString(),
         },
-      ],
-      mode: "payment",
-      metadata: {
-        jobId: jobPost._id.toString(),
-      },
-      success_url: `${process.env.NEXT_PUBLIC_URL}/payment/success`,
-      cancel_url: `${process.env.NEXT_PUBLIC_URL}/payment/cancel`,
+        success_url: `${process.env.NEXT_PUBLIC_URL}/payment/success`,
+        cancel_url: `${process.env.NEXT_PUBLIC_URL}/payment/cancel`,
     });
-    return redirect(session.url as string);
-  }
-  
+
+    // Return the URL to the client instead of throwing a server-side redirect
+    return { success: true, url: session.url };
+}
+
 
 export async function getJobs(page: number , pageSize: number = 10 , jobType: string[] = [] , location: string = ""){
    await connectDB();

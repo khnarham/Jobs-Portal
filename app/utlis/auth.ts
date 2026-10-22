@@ -1,24 +1,26 @@
-
-// @ts-ignore
-import NextAuth, { type NextAuthOptions } from "next-auth";
+import NextAuth from "next-auth";
 import GitHubProvider from "next-auth/providers/github";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import clientPromise from "@/lib/mongooseClient";
 import type { JWT } from "next-auth/jwt";
 import type { Session, User, Account, Profile } from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
 import UserModel from "@/database/schema/UserModel";
 import { connectDB } from "@/lib/db";
 
-export const authOptions: NextAuthOptions = {
+export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: MongoDBAdapter(clientPromise),
   providers: [
     GitHubProvider({
       clientId: process.env.GITHUB_CLIENT_ID!,
       clientSecret: process.env.GITHUB_CLIENT_SECRET!,
     }),
+    GoogleProvider({ 
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
   ],
   callbacks: {
-
     async signIn({ user, account, profile }: {
       user: User;
       account?: Account | null;
@@ -64,12 +66,7 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
   },
   pages: {
-    signIn: "/auth/signin",
+    signIn: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
-};
-
-const handler = NextAuth(authOptions);
-
-export const { handlers, auth, signIn, signOut } = handler;
-export default handler;
+});

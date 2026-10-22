@@ -133,11 +133,11 @@ const JobIdPage = async ({ params }: { params: Params }) => {
                   <Badge
                     key={benefit.id}
                     variant={isOffered ? "default" : "outline"}
-                    className={`text-sm px-4 py-1.5 rounded-full ${
-                      !isOffered && " opacity-75 cursor-not-allowed"
+                    className={`text-sm px-4 py-1.5  rounded-full ${
+                      !isOffered && " opacity-75  cursor-not-allowed"
                     }`}
                   >
-                    <span className="flex items-center gap-2">
+                    <span className="flex  items-center gap-2">
                       {benefit.icon}
                       {benefit.label}
                     </span>

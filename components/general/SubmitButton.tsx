@@ -28,7 +28,7 @@ export function GeneralSubmitButton({
       type="submit"
       variant={variant}
       disabled={pending}
-      className={cn(width, "py-6 hover:bg-zinc-900/80")}
+      className={cn(width, "py-6 bg-green-600 text-white hover:bg-green-700/80")}
     >
       {pending ? (
         <>

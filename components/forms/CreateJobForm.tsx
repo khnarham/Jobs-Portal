@@ -74,21 +74,30 @@ export function CreateJobForm({
     },
   });
 
+
+
+
+
   const [pending, setPending] = useState(false);
-  async function onSubmit(values: z.infer<typeof jobSchema>) {
-    try {
-      setPending(true);
-       const result = await createJob(values);
-       if(!result.success){
-        return toast.error(result.message);
-       }
-     toast.success(result.message);
-    } catch {
-      toast.error("Something went wrong. Please try again.");
-    } finally {
-      setPending(false);
+const onSubmit = async (data: z.infer<typeof jobSchema>) => {
+  try {
+    const res = await createJob(data);
+
+    if (res?.success && res?.url) {
+      toast.success("Job created successfully! Redirecting to payment...");
+      
+      window.location.href = res.url;
+      return;
     }
+
+    if (res?.success === false) {
+      toast.error(res.message || "Failed to create job");
+    }
+  } catch (error) {
+    toast.error("An unexpected error occurred");
   }
+};
+
   return (
     <Form {...form}>
       <form

@@ -84,7 +84,7 @@ const LoginForm = (props: Props) => {
         </form>
         <form action={async () => {
             "use server"
-            await signIn("google")
+            await signIn("google" , {redirectTo: "/onboarding"})
         }}>
         <GeneralSubmitButton
                   text="Login with Google"

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 import {
   Form,
   FormControl,
@@ -48,12 +49,13 @@ export default function CompanyForm() {
   });
 
   const [pending, setPending] = useState(false);
+  const router = useRouter();
 
   async function onSubmit(values: z.infer<typeof companySchema>) {
     try {
         setPending(true);
        const result = await createCompany(values);
-
+       router.push("/")
         form.reset();
     } catch (error) {
         console.log("error",error);
